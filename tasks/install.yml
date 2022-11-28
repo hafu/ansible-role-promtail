@@ -12,6 +12,35 @@
     system: True
   when: promtail_system_group != "root"
 
+- name: Check if promtail user exists
+  getent:
+    database: passwd
+    key: "{{ promtail_system_user }}"
+    fail_key: False
+  when: promtail_system_user != "root"
+
+- name: Get existing promtail user parameters
+  register: promtail_system_user_parameters
+  when: getent_passwd is defined and promtail_system_user in getent_passwd
+  user:
+    name: "{{ promtail_system_user }}"
+
+- name: Check for existing service unit file
+  when: promtail_system_user_parameters is defined
+  register: promtail_systemd_service_file
+  stat:
+    path: "/etc/systemd/system/{{ promtail_systemd_service }}.service"
+
+- name: Stop promtail processes on user home change
+  when: promtail_system_user_parameters is defined
+        and promtail_systemd_service_file.stat.exists
+        and promtail_system_user_parameters.home != promtail_install_dir
+  systemd:
+    name: "{{ promtail_systemd_service }}"
+    state: stopped
+  notify:
+    - Restart promtail
+
 - name: Create the promtail user
   user:
     name: "{{ promtail_system_user }}"
